@@ -141,9 +141,27 @@ var createURLFromArray = function(array, mimeType) {
 kthoom.ImageFile = function(file) {
     this.filename = file.filename;
     var fileExtension = file.filename.split(".").pop().toLowerCase();
-    this.mimeType = fileExtension === "png" ? "image/png" :
-        (fileExtension === "jpg" || fileExtension === "jpeg") ? "image/jpeg" :
-            fileExtension === "gif" ? "image/gif" : fileExtension === "svg" ? "image/xml+svg" : undefined;
+    switch (fileExtension) {
+        case "jpg":
+        case "jpeg":
+            this.mimeType = "image/jpeg";
+            break;
+        case "png":
+            this.mimeType = "image/png";
+            break;
+        case "gif":
+            this.mimeType = "image/gif";
+            break;
+        case "svg":
+            this.mimeType = "image/svg+xml";
+            break;
+        case "webp":
+            this.mimeType = "image/webp";
+            break;
+        default:
+            this.mimeType = undefined;
+            break;
+    }
     if ( this.mimeType !== undefined) {
         this.dataURI = createURLFromArray(file.fileData, this.mimeType);
         this.data = file;
@@ -162,15 +180,10 @@ function initProgressClick() {
 function loadFromArrayBuffer(ab) {
     var start = (new Date).getTime();
     var h = new Uint8Array(ab, 0, 10);
-    unrar5(ab);
     var pathToBitJS = "../../static/js/archive/";
     var lastCompletion = 0;
-    /*if (h[0] === 0x52 && h[1] === 0x61 && h[2] === 0x72 && h[3] === 0x21) { //Rar!
-        if (h[7] === 0x01) {
-            unarchiver = new bitjs.archive.Unrarrer(ab, pathToBitJS);
-        } else {
-            unarchiver = new bitjs.archive.Unrarrer5(ab, pathToBitJS);
-        }
+    if (h[0] === 0x52 && h[1] === 0x61 && h[2] === 0x72 && h[3] === 0x21) { //Rar!
+        unarchiver = new bitjs.archive.Unrarrer(ab, pathToBitJS);
     } else if (h[0] === 80 && h[1] === 75) { //PK (Zip)
         unarchiver = new bitjs.archive.Unzipper(ab, pathToBitJS);
     } else if (h[0] === 255 && h[1] === 216) { // JPEG
@@ -234,7 +247,7 @@ function loadFromArrayBuffer(ab) {
         unarchiver.start();
     } else {
         alert("Some error");
-    }*/
+    }
 }
 
 function scrollTocToActive() {
@@ -336,7 +349,7 @@ function setImage(url) {
                         $("#mainText").innerHTML("<iframe style=\"width:100%;height:700px;border:0\" src=\"data:text/html," + escape(xhr.responseText) + "\"></iframe>");
                     };
                     xhr.send(null);
-                } else if (!/(jpg|jpeg|png|gif)$/.test(imageFiles[currentImage].filename) && imageFiles[currentImage].data.uncompressedSize < 10 * 1024) {
+                } else if (!/(jpg|jpeg|png|gif|webp)$/.test(imageFiles[currentImage].filename) && imageFiles[currentImage].data.uncompressedSize < 10 * 1024) {
                     xhr.open("GET", url, true);
                     xhr.onload = function() {
                         $("#mainText").css("display", "");
@@ -640,6 +653,14 @@ function init(filename) {
     // Focus the scrollable area so that keyboard scrolling work as expected
     $("#mainContent").focus();
 
+    $("#mainContent").swipe( {
+        swipeRight:function() {
+            showLeftPage();
+        },
+        swipeLeft:function() {
+            showRightPage();
+        },
+    });
     $("#mainImage").click(function(evt) {
         // Firefox does not support offsetX/Y so we have to manually calculate
         // where the user clicked in the image.

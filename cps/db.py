@@ -32,9 +32,9 @@ from sqlalchemy.orm import relationship, sessionmaker, scoped_session
 from sqlalchemy.orm.collections import InstrumentedList
 from sqlalchemy.ext.declarative import declarative_base, DeclarativeMeta
 from sqlalchemy.pool import StaticPool
-from flask_login import current_user
 from sqlalchemy.sql.expression import and_, true, false, text, func, or_
 from sqlalchemy.ext.associationproxy import association_proxy
+from flask_login import current_user
 from babel import Locale as LC
 from babel.core import UnknownLocaleError
 from flask_babel import gettext as _
@@ -49,6 +49,8 @@ try:
     use_unidecode = True
 except ImportError:
     use_unidecode = False
+
+log = logger.create()
 
 cc_exceptions = ['datetime', 'comments', 'composite', 'series']
 cc_classes = {}
@@ -154,10 +156,8 @@ class Identifiers(Base):
             return u"https://portal.issn.org/resource/ISSN/{0}".format(self.val)
         elif format_type == "isfdb":
             return u"http://www.isfdb.org/cgi-bin/pl.cgi?{0}".format(self.val)
-        elif format_type == "url":
-            return u"{0}".format(self.val)
         else:
-            return u""
+            return u"{0}".format(self.val)
 
 
 class Comments(Base):
@@ -384,14 +384,14 @@ class Custom_Columns(Base):
 
 class AlchemyEncoder(json.JSONEncoder):
 
-    def default(self, obj):
-        if isinstance(obj.__class__, DeclarativeMeta):
+    def default(self, o):
+        if isinstance(o.__class__, DeclarativeMeta):
             # an SQLAlchemy class
             fields = {}
-            for field in [x for x in dir(obj) if not x.startswith('_') and x != 'metadata']:
+            for field in [x for x in dir(o) if not x.startswith('_') and x != 'metadata']:
                 if field == 'books':
                     continue
-                data = obj.__getattribute__(field)
+                data = o.__getattribute__(field)
                 try:
                     if isinstance(data, str):
                         data = data.replace("'", "\'")
@@ -402,18 +402,21 @@ class AlchemyEncoder(json.JSONEncoder):
                                 el.append(ele.get())
                             else:
                                 el.append(json.dumps(ele, cls=AlchemyEncoder))
-                        data = ",".join(el)
+                        if field == 'authors':
+                            data = " & ".join(el)
+                        else:
+                            data = ",".join(el)
                         if data == '[]':
                             data = ""
                     else:
                         json.dumps(data)
                     fields[field] = data
-                except:
+                except Exception:
                     fields[field] = ""
             # a json-encodable dict
             return fields
 
-        return json.JSONEncoder.default(self, obj)
+        return json.JSONEncoder.default(self, o)
 
 
 class CalibreDB():
@@ -425,24 +428,27 @@ class CalibreDB():
     # instances alive once they reach the end of their respective scopes
     instances = WeakSet()
 
-    def __init__(self):
+    def __init__(self, expire_on_commit=True):
         """ Initialize a new CalibreDB session
         """
         self.session = None
         if self._init:
-            self.initSession()
+            self.initSession(expire_on_commit)
 
         self.instances.add(self)
 
 
-    def initSession(self):
+    def initSession(self, expire_on_commit=True):
         self.session = self.session_factory()
+        self.session.expire_on_commit = expire_on_commit
         self.update_title_sort(self.config)
 
     @classmethod
     def setup_db(cls, config, app_db_path):
         cls.config = config
         cls.dispose()
+
+        # toDo: if db changed -> delete shelfs, delete download books, delete read boks, kobo sync??
 
         if not config.config_calibre_dir:
             config.invalidate()
@@ -557,8 +563,8 @@ class CalibreDB():
     def get_book_by_uuid(self, book_uuid):
         return self.session.query(Books).filter(Books.uuid == book_uuid).first()
 
-    def get_book_format(self, book_id, format):
-        return self.session.query(Data).filter(Data.book == book_id).filter(Data.format == format).first()
+    def get_book_format(self, book_id, file_format):
+        return self.session.query(Data).filter(Data.book == book_id).filter(Data.format == file_format).first()
 
     # Language and content filters for displaying in the UI
     def common_filters(self, allow_show_archived=False):
@@ -616,11 +622,16 @@ class CalibreDB():
             .join(*join, isouter=True) \
             .filter(db_filter) \
             .filter(self.common_filters(allow_show_archived))
-        pagination = Pagination(page, pagesize,
-                                len(query.all()))
-        entries = query.order_by(*order).offset(off).limit(pagesize).all()
-        for book in entries:
-            book = self.order_authors(book)
+        entries = list()
+        pagination = list()
+        try:
+            pagination = Pagination(page, pagesize,
+                                    len(query.all()))
+            entries = query.order_by(*order).offset(off).limit(pagesize).all()
+        except Exception as e:
+            log.debug_or_exception(e)
+        #for book in entries:
+        #    book = self.order_authors(book)
         return entries, randm, pagination
 
     # Orders all Authors in the list according to authors sort
@@ -731,7 +742,7 @@ class CalibreDB():
             if old_session:
                 try:
                     old_session.close()
-                except:
+                except Exception:
                     pass
                 if old_session.bind:
                     try:
@@ -764,5 +775,5 @@ def lcase(s):
         return unidecode.unidecode(s.lower())
     except Exception as e:
         log = logger.create()
-        log.exception(e)
+        log.debug_or_exception(e)
         return s.lower()

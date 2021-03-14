@@ -21,7 +21,9 @@ import sys
 import os
 from collections import namedtuple
 
+# if installed via pip this variable is set to true
 HOME_CONFIG = False
+UPDATER_AVAILABLE = True
 
 # Base dir is parent of current file, necessary if called from different folder
 if sys.version_info < (3, 0):
@@ -40,7 +42,7 @@ if HOME_CONFIG:
         os.makedirs(home_dir)
     CONFIG_DIR = os.environ.get('CALIBRE_DBPATH', home_dir)
 else:
-    CONFIG_DIR      = os.environ.get('CALIBRE_DBPATH', BASE_DIR)
+    CONFIG_DIR = os.environ.get('CALIBRE_DBPATH', BASE_DIR)
 
 
 ROLE_USER               = 0 << 0
@@ -102,7 +104,7 @@ LDAP_AUTH_SIMPLE         = 0
 
 DEFAULT_MAIL_SERVER = "mail.example.org"
 
-DEFAULT_PASSWORD    = "admin123"
+DEFAULT_PASSWORD    = "admin123"  # nosec  # noqa
 DEFAULT_PORT        = 8083
 env_CALIBRE_PORT = os.environ.get("CALIBRE_PORT", DEFAULT_PORT)
 try:
@@ -113,7 +115,8 @@ del env_CALIBRE_PORT
 
 
 EXTENSIONS_AUDIO    = {'mp3', 'mp4', 'ogg', 'opus', 'wav', 'flac', 'm4a', 'm4b'}
-EXTENSIONS_CONVERT  = ['pdf', 'epub', 'mobi', 'azw3', 'docx', 'rtf', 'fb2', 'lit', 'lrf', 'txt', 'htmlz', 'rtf', 'odt']
+EXTENSIONS_CONVERT_FROM  = ['pdf', 'epub', 'mobi', 'azw3', 'docx', 'rtf', 'fb2', 'lit', 'lrf', 'txt', 'htmlz', 'rtf', 'odt','cbz','cbr']
+EXTENSIONS_CONVERT_TO  = ['pdf', 'epub', 'mobi', 'azw3', 'docx', 'rtf', 'fb2', 'lit', 'lrf', 'txt', 'htmlz', 'rtf', 'odt']
 EXTENSIONS_UPLOAD   = {'txt', 'pdf', 'epub', 'kepub', 'mobi', 'azw', 'azw3', 'cbr', 'cbz', 'cbt', 'djvu', 'prc', 'doc', 'docx',
                        'fb2', 'html', 'rtf', 'lit', 'odt', 'mp3', 'mp4', 'ogg', 'opus', 'wav', 'flac', 'm4a', 'm4b'}
 
@@ -129,7 +132,7 @@ def selected_roles(dictionary):
 BookMeta = namedtuple('BookMeta', 'file_path, extension, title, author, cover, description, tags, series, '
                                   'series_id, languages')
 
-STABLE_VERSION = {'version': '0.6.10 Beta'}
+STABLE_VERSION = {'version': '0.6.12 Beta'}
 
 NIGHTLY_VERSION = {}
 NIGHTLY_VERSION[0] = '$Format:%H$'

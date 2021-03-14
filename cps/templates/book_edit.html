@@ -3,7 +3,7 @@
 {% if book %}
   <div class="col-sm-3 col-lg-3 col-xs-12">
     <div class="cover">
-        <img src="{{ url_for('web.get_cover', book_id=book.id) }}" alt="{{ book.title }}"/>
+        <img src="{{ url_for('web.get_cover', book_id=book.id, edit=1|uuidfilter)  }}" alt="{{ book.title }}"/>
     </div>
 {% if g.user.role_delete_books() %}
     <div class="text-center">
@@ -197,7 +197,8 @@
 {% endblock %}
 
 {% block modal %}
-{{ delete_book(book.id) }}
+{{ delete_book() }}
+{{ delete_confirm_modal() }}
 
 <div class="modal fade" id="metaModal" tabindex="-1" role="dialog" aria-labelledby="metaModalLabel">
   <div class="modal-dialog modal-lg" role="document">

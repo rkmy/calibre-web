@@ -19,16 +19,9 @@ var direction = 0;  // Descending order
 var sort = 0;       // Show sorted entries
 
 $("#sort_name").click(function() {
-    var class_name = $("h1").attr('Class') + "_sort_name";
+    var className = $("h1").attr("Class") + "_sort_name";
     var obj = {};
-    obj[class_name] = sort;
-    /*$.ajax({
-        method:"post",
-        contentType: "application/json; charset=utf-8",
-        dataType: "json",
-        url: window.location.pathname + "/../../ajax/view",
-        data: JSON.stringify({obj}),
-    });*/
+    obj[className] = sort;
 
     var count = 0;
     var index = 0;
@@ -95,7 +88,7 @@ $("#desc").click(function() {
     // Find count of middle element
     var count = $(".row:visible").length;
     if (count > 20) {
-        middle = parseInt(count / 2) + (count % 2);
+        middle = parseInt(count / 2, 10) + (count % 2);
 
         //var middle = parseInt(count / 2) + (count % 2);
         // search for the middle of all visible elements
@@ -142,7 +135,7 @@ $("#asc").click(function() {
     // Find count of middle element
     var count = $(".row:visible").length;
     if (count > 20) {
-        var middle = parseInt(count / 2) + (count % 2);
+        var middle = parseInt(count / 2, 10) + (count % 2);
 
         //var middle = parseInt(count / 2) + (count % 2);
         // search for the middle of all visible elements
