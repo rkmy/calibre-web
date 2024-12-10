@@ -13,6 +13,10 @@ var reader;
         bookmarks: calibre.bookmark ? [calibre.bookmark] : []
     });
 
+    Object.keys(themes).forEach(function (theme) {
+        reader.rendition.themes.register(theme, themes[theme].css_path);
+    });
+
     if (calibre.useBookmarks) {
         reader.on("reader:bookmarked", updateBookmark.bind(reader, "add"));
         reader.on("reader:unbookmarked", updateBookmark.bind(reader, "remove"));
@@ -61,15 +65,20 @@ var reader;
                 this.removeBookmark(bookmark);
             }.bind(this));
         }
+        
+        var csrftoken = $("input[name='csrf_token']").val();
 
         // Save to database
         $.ajax(calibre.bookmarkUrl, {
             method: "post",
-            data: { bookmark: location || "" }
+            data: { bookmark: location || "" },
+            headers: { "X-CSRFToken": csrftoken }
         }).fail(function (xhr, status, error) {
             alert(error);
         });
     }
+    
+    // Default settings load
+    const theme = localStorage.getItem("calibre.reader.theme") ?? "lightTheme";
+    selectTheme(theme);
 })();
-
-

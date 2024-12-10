@@ -22,18 +22,16 @@
 
 # custom jinja filters
 
-from __future__ import division, print_function, unicode_literals
+from markupsafe import escape
 import datetime
 import mimetypes
 from uuid import uuid4
 
-from babel.dates import format_date
-from flask import Blueprint, request, url_for
-from flask_babel import get_locale
-from flask_login import current_user
+from flask import Blueprint, request, url_for, g
+from flask_babel import format_date
+from .cw_login import current_user
 
-from . import logger
-
+from . import constants, logger
 
 jinjia = Blueprint('jinjia', __name__)
 log = logger.create()
@@ -45,6 +43,8 @@ def url_for_other_page(page):
     args = request.view_args.copy()
     args['page'] = page
     for get, val in request.args.items():
+        if get == "page":
+            continue
         args[get] = val
     return url_for(request.endpoint, **args)
 
@@ -78,11 +78,11 @@ def mimetype_filter(val):
 @jinjia.app_template_filter('formatdate')
 def formatdate_filter(val):
     try:
-        return format_date(val, format='medium', locale=get_locale())
+        return format_date(val, format='medium')
     except AttributeError as e:
         log.error('Babel error: %s, Current user locale: %s, Current User: %s', e,
                   current_user.locale,
-                  current_user.nickname
+                  current_user.name
                   )
         return val
 
@@ -113,23 +113,71 @@ def yesno(value, yes, no):
 
 @jinjia.app_template_filter('formatfloat')
 def formatfloat(value, decimals=1):
-    formatedstring = '%d' % value
-    if (value % 1) != 0:
-        formatedstring = ('%s.%d' % (formatedstring, (value % 1) * 10**decimals)).rstrip('0')
-    return formatedstring
+    if not value or (isinstance(value, str) and not value.is_numeric()):
+        return value
+    formated_value = ('{0:.' + str(decimals) + 'f}').format(value)
+    if formated_value.endswith('.' + "0" * decimals):
+        formated_value = formated_value.rstrip('0').rstrip('.')
+    return formated_value
 
 
-@jinjia.app_template_filter('formatseriesindex')
-def formatseriesindex_filter(series_index):
-    if series_index:
-        if int(series_index) - series_index == 0:
-            return int(series_index)
-        else:
-            return series_index
-    return 0
+@jinjia.app_template_filter('escapedlink')
+def escapedlink_filter(url, text):
+    return "<a href='{}'>{}</a>".format(url, escape(text))
+
 
 @jinjia.app_template_filter('uuidfilter')
 def uuidfilter(var):
     return uuid4()
 
 
+@jinjia.app_template_filter('cache_timestamp')
+def cache_timestamp(rolling_period='month'):
+    if rolling_period == 'day':
+        return str(int(datetime.datetime.today().replace(hour=1, minute=1).timestamp()))
+    elif rolling_period == 'year':
+        return str(int(datetime.datetime.today().replace(day=1).timestamp()))
+    else:
+        return str(int(datetime.datetime.today().replace(month=1, day=1).timestamp()))
+
+
+@jinjia.app_template_filter('last_modified')
+def book_last_modified(book):
+    return str(int(book.last_modified.timestamp()))
+
+
+@jinjia.app_template_filter('get_cover_srcset')
+def get_cover_srcset(book):
+    srcset = list()
+    resolutions = {
+        constants.COVER_THUMBNAIL_SMALL: 'sm',
+        constants.COVER_THUMBNAIL_MEDIUM: 'md',
+        constants.COVER_THUMBNAIL_LARGE: 'lg'
+    }
+    for resolution, shortname in resolutions.items():
+        url = url_for('web.get_cover', book_id=book.id, resolution=shortname, c=book_last_modified(book))
+        srcset.append(f'{url} {resolution}x')
+    return ', '.join(srcset)
+
+
+@jinjia.app_template_filter('get_series_srcset')
+def get_cover_srcset(series):
+    srcset = list()
+    resolutions = {
+        constants.COVER_THUMBNAIL_SMALL: 'sm',
+        constants.COVER_THUMBNAIL_MEDIUM: 'md',
+        constants.COVER_THUMBNAIL_LARGE: 'lg'
+    }
+    for resolution, shortname in resolutions.items():
+        url = url_for('web.get_series_cover', series_id=series.id, resolution=shortname, c=cache_timestamp())
+        srcset.append(f'{url} {resolution}x')
+    return ', '.join(srcset)
+
+
+@jinjia.app_template_filter('music')
+def contains_music(book_formats):
+    result = False
+    for format in book_formats:
+        if format.format.lower() in g.constants.EXTENSIONS_AUDIO:
+            result = True
+    return result

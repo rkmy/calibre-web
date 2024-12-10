@@ -16,23 +16,82 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-import base64
-import binascii
+from functools import wraps
 
 from sqlalchemy.sql.expression import func
+from .cw_login import login_required
+
+from flask import request, g
+from flask_httpauth import HTTPBasicAuth
+from werkzeug.datastructures import Authorization
 from werkzeug.security import check_password_hash
-from flask_login import login_required
 
-from . import lm, ub, config, constants, services
+from . import lm, ub, config, logger, limiter, constants, services
 
-try:
-    from functools import wraps
-except ImportError:
-    pass  # We're not using Python 3
+
+log = logger.create()
+auth = HTTPBasicAuth()
+
+
+@auth.verify_password
+def verify_password(username, password):
+    user = ub.session.query(ub.User).filter(func.lower(ub.User.name) == username.lower()).first()
+    if user:
+        if user.name.lower() == "guest":
+            if config.config_anonbrowse == 1:
+                return user
+        if config.config_login_type == constants.LOGIN_LDAP and services.ldap:
+            login_result, error = services.ldap.bind_user(user.name, password)
+            if login_result:
+                [limiter.limiter.storage.clear(k.key) for k in limiter.current_limits]
+                return user
+            if error is not None:
+                log.error(error)
+        else:
+            limiter.check()
+            if check_password_hash(str(user.password), password):
+                [limiter.limiter.storage.clear(k.key) for k in limiter.current_limits]
+                return user
+    ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+    log.warning('OPDS Login failed for user "%s" IP-address: %s', username, ip_address)
+    return None
+
+
+def requires_basic_auth_if_no_ano(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        authorisation = auth.get_auth()
+        status = None
+        user = None
+        if config.config_allow_reverse_proxy_header_login and not authorisation:
+            user = load_user_from_reverse_proxy_header(request)
+        if config.config_anonbrowse == 1 and not authorisation:
+            authorisation = Authorization(
+                b"Basic", {'username': "Guest", 'password': ""})
+        if not user:
+            user = auth.authenticate(authorisation, "")
+        if user in (False, None):
+            status = 401
+        if status:
+            try:
+                return auth.auth_error_callback(status)
+            except TypeError:
+                return auth.auth_error_callback()
+        g.flask_httpauth_user = user if user is not True \
+            else auth.username if auth else None
+        return auth.ensure_sync(f)(*args, **kwargs)
+    return decorated
+
 
 def login_required_if_no_ano(func):
     @wraps(func)
     def decorated_view(*args, **kwargs):
+        if config.config_allow_reverse_proxy_header_login:
+            user = load_user_from_reverse_proxy_header(request)
+            if user:
+                g.flask_httpauth_user = user
+                return func(*args, **kwargs)
+            g.flask_httpauth_user = None
         if config.config_anonbrowse == 1:
             return func(*args, **kwargs)
         return login_required(func)(*args, **kwargs)
@@ -40,49 +99,43 @@ def login_required_if_no_ano(func):
     return decorated_view
 
 
-def _fetch_user_by_name(username):
-    return ub.session.query(ub.User).filter(func.lower(ub.User.nickname) == username.lower()).first()
+def user_login_required(func):
+    @wraps(func)
+    def decorated_view(*args, **kwargs):
+        if config.config_allow_reverse_proxy_header_login:
+            user = load_user_from_reverse_proxy_header(request)
+            if user:
+                g.flask_httpauth_user = user
+                return func(*args, **kwargs)
+            g.flask_httpauth_user = None
+        return login_required(func)(*args, **kwargs)
+
+    return decorated_view
+
+
+def load_user_from_reverse_proxy_header(req):
+    rp_header_name = config.config_reverse_proxy_login_header_name
+    if rp_header_name:
+        rp_header_username = req.headers.get(rp_header_name)
+        if rp_header_username:
+            user = ub.session.query(ub.User).filter(func.lower(ub.User.name) == rp_header_username.lower()).first()
+            if user:
+                [limiter.limiter.storage.clear(k.key) for k in limiter.current_limits]
+                return user
+    return None
 
 
 @lm.user_loader
-def load_user(user_id):
-    return ub.session.query(ub.User).filter(ub.User.id == int(user_id)).first()
+def load_user(user_id, random, session_key):
+    user = ub.session.query(ub.User).filter(ub.User.id == int(user_id)).first()
+    if session_key:
+        entry = ub.session.query(ub.User_Sessions).filter(ub.User_Sessions.random == random,
+                                                          ub.User_Sessions.session_key == session_key).first()
+        if not entry or entry.user_id != user.id:
+            return None
+    elif random:
+        entry = ub.session.query(ub.User_Sessions).filter(ub.User_Sessions.random == random).first()
+        if not entry or entry.user_id != user.id:
+            return None
+    return user
 
-
-@lm.request_loader
-def load_user_from_request(request):
-    if config.config_allow_reverse_proxy_header_login:
-        rp_header_name = config.config_reverse_proxy_login_header_name
-        if rp_header_name:
-            rp_header_username = request.headers.get(rp_header_name)
-            if rp_header_username:
-                user = _fetch_user_by_name(rp_header_username)
-                if user:
-                    return user
-
-    auth_header = request.headers.get("Authorization")
-    if auth_header:
-        user = load_user_from_auth_header(auth_header)
-        if user:
-            return user
-
-    return
-
-
-def load_user_from_auth_header(header_val):
-    if header_val.startswith('Basic '):
-        header_val = header_val.replace('Basic ', '', 1)
-    basic_username = basic_password = ''  # nosec
-    try:
-        header_val = base64.b64decode(header_val).decode('utf-8')
-        basic_username = header_val.split(':')[0]
-        basic_password = header_val.split(':')[1]
-    except (TypeError, UnicodeDecodeError, binascii.Error):
-        pass
-    user = _fetch_user_by_name(basic_username)
-    if user and config.config_login_type == constants.LOGIN_LDAP and services.ldap:
-        if services.ldap.bind_user(str(user.password), basic_password):
-            return user
-    if user and check_password_hash(str(user.password), basic_password):
-        return user
-    return

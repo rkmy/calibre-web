@@ -3,15 +3,16 @@
 <div class="well col-sm-6 col-sm-offset-2">
   <h2 style="margin-top: 0">{{_('Register New Account')}}</h2>
   <form method="POST" role="form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if not config.config_register_email %}
     <div class="form-group required">
-      <label for="nickname">{{_('Username')}}</label>
-      <input type="text" class="form-control" id="nickname" name="nickname" placeholder="{{_('Choose a username')}}" required>
+      <label for="name">{{_('Username')}}</label>
+      <input type="text" class="form-control" id="name" name="name" placeholder="{{_('Choose a username')}}" required>
     </div>
     {% endif %}
     <div class="form-group required">
-      <label for="email">{{_('E-mail Address')}}</label>
-      <input type="email" class="form-control" id="email" name="email" placeholder="{{_('Your email address')}}" required>
+      <label for="email">{{_('Email')}}</label>
+      <input type="email" class="form-control" id="email" name="email" placeholder="{{_('Your Email')}}" required>
     </div>
     <button type="submit" id="submit" class="btn btn-primary">{{_('Register')}}</button>
     {% if config.config_use_github_oauth %}

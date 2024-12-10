@@ -15,56 +15,79 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+var direction = $("#asc").data('order');  // 0=Descending order; 1= ascending order
+
 var $list = $("#list").isotope({
     itemSelector: ".book",
     layoutMode: "fitRows",
     getSortData: {
-        title: ".title",
-    }
+        title: ".title"
+    },
 });
 
+
 $("#desc").click(function() {
+    if (direction === 0) {
+        return;
+    }
+    $("#asc").removeClass("active");
+    $("#desc").addClass("active");
+
     var page = $(this).data("id");
     $.ajax({
         method:"post",
         contentType: "application/json; charset=utf-8",
         dataType: "json",
-        url: window.location.pathname + "/../../ajax/view",
+        url: getPath() + "/ajax/view",
         data: "{\"" + page + "\": {\"dir\": \"desc\"}}",
     });
+    // invert sorting order to make already inverted start order working
     $list.isotope({
         sortBy: "name",
-        sortAscending: true
+        sortAscending: !$list.data('isotope').options.sortAscending
     });
+    direction = 0;
 });
 
 $("#asc").click(function() {
+    if (direction === 1) {
+        return;
+    }
+    $("#desc").removeClass("active");
+    $("#asc").addClass("active");
+
     var page = $(this).data("id");
     $.ajax({
         method:"post",
         contentType: "application/json; charset=utf-8",
         dataType: "json",
-        url: window.location.pathname + "/../../ajax/view",
+        url: getPath() + "/ajax/view",
         data: "{\"" + page + "\": {\"dir\": \"asc\"}}",
     });
     $list.isotope({
         sortBy: "name",
-        sortAscending: false
+        sortAscending: !$list.data('isotope').options.sortAscending
     });
+    direction = 1;
 });
 
 $("#all").click(function() {
+    $(".char").removeClass("active");
+    $("#all").addClass("active");
     // go through all elements and make them visible
     $list.isotope({ filter: function() {
-            return true;
-        }
+        return true;
+    }
     });
 });
 
 $(".char").click(function() {
+    $(".char").removeClass("active");
+    $(this).addClass("active");
+    $("#all").removeClass("active");
     var character = this.innerText;
     $list.isotope({ filter: function() {
-            return this.attributes["data-id"].value.charAt(0).toUpperCase() == character;
-        }
+        return this.attributes["data-id"].value.charAt(0).toUpperCase() === character;
+    }
     });
 });
